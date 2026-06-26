@@ -162,8 +162,8 @@ cython_debug/
 #.idea/
 
 # RT-DETRv3 local files
-dataset/
-datasets/
+/dataset/
+/datasets/
 weights/
 output/
 output_inference/
