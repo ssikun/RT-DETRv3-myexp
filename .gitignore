@@ -175,3 +175,6 @@ vdl_log_dir/
 # IDE
 .idea/
 .vscode/
+
+configs/datasets/*
+!configs/datasets/coco_detection.yml
