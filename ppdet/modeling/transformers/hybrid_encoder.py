@@ -142,7 +142,9 @@ class HybridEncoder(nn.Layer):
                  depth_mult=1.0,
                  act='silu',
                  trt=False,
-                 eval_size=None):
+                 eval_size=None,
+                 use_sawf=False,
+                 sawf_eps=1e-4):
         super(HybridEncoder, self).__init__()
         self.in_channels = in_channels
         self.feat_strides = feat_strides
@@ -151,6 +153,8 @@ class HybridEncoder(nn.Layer):
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
         self.eval_size = eval_size
+        self.use_sawf = use_sawf
+        self.sawf_eps = sawf_eps
 
         # channel projection
         self.input_proj = nn.LayerList()
@@ -202,6 +206,18 @@ class HybridEncoder(nn.Layer):
                     act=act,
                     expansion=expansion))
 
+        num_fusion_layers = len(in_channels) - 1
+        if self.use_sawf:
+            self.fpn_fusion_weights = self.create_parameter(
+                shape=[num_fusion_layers, 2],
+                default_initializer=nn.initializer.Constant(1.0))
+            self.pan_fusion_weights = self.create_parameter(
+                shape=[num_fusion_layers, 2],
+                default_initializer=nn.initializer.Constant(1.0))
+        else:
+            self.fpn_fusion_weights = None
+            self.pan_fusion_weights = None
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -237,6 +253,15 @@ class HybridEncoder(nn.Layer):
             ],
             axis=1)[None, :, :]
 
+    def _weighted_concat(self, feats, weight):
+        if not self.use_sawf or weight is None:
+            return paddle.concat(feats, axis=1)
+
+        weight = F.relu(weight)
+        weight = len(feats) * weight / (paddle.sum(weight) + self.sawf_eps)
+        feats = [feat * weight[i] for i, feat in enumerate(feats)]
+        return paddle.concat(feats, axis=1)
+
     def forward(self, feats, for_mot=False, is_teacher=False):
         assert len(feats) == len(self.in_channels)
         # get projection features
@@ -267,9 +292,12 @@ class HybridEncoder(nn.Layer):
             inner_outs[0] = feat_heigh
             upsample_feat = F.interpolate(
                 feat_heigh, scale_factor=2., mode="nearest")
-            inner_out = self.fpn_blocks[len(self.in_channels) - 1 - idx](
-                paddle.concat(
-                    [upsample_feat, feat_low], axis=1))
+            fusion_idx = len(self.in_channels) - 1 - idx
+            inner_out = self.fpn_blocks[fusion_idx](
+                self._weighted_concat(
+                    [upsample_feat, feat_low],
+                    self.fpn_fusion_weights[fusion_idx]
+                    if self.use_sawf else None))
             inner_outs.insert(0, inner_out)
 
         # bottom-up pan
@@ -278,8 +306,10 @@ class HybridEncoder(nn.Layer):
             feat_low = outs[-1]
             feat_height = inner_outs[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
-            out = self.pan_blocks[idx](paddle.concat(
-                [downsample_feat, feat_height], axis=1))
+            out = self.pan_blocks[idx](
+                self._weighted_concat(
+                    [downsample_feat, feat_height],
+                    self.pan_fusion_weights[idx] if self.use_sawf else None))
             outs.append(out)
 
         return outs
