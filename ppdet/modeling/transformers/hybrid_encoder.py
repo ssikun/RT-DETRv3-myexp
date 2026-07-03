@@ -144,7 +144,9 @@ class HybridEncoder(nn.Layer):
                  trt=False,
                  eval_size=None,
                  use_sawf=False,
-                 sawf_eps=1e-4):
+                 sawf_eps=1e-4,
+                 sawf_fpn_init=(0.8, 1.2),
+                 sawf_pan_init=(1.2, 0.8)):
         super(HybridEncoder, self).__init__()
         self.in_channels = in_channels
         self.feat_strides = feat_strides
@@ -155,6 +157,8 @@ class HybridEncoder(nn.Layer):
         self.eval_size = eval_size
         self.use_sawf = use_sawf
         self.sawf_eps = sawf_eps
+        self.sawf_fpn_init = sawf_fpn_init
+        self.sawf_pan_init = sawf_pan_init
 
         # channel projection
         self.input_proj = nn.LayerList()
@@ -208,12 +212,18 @@ class HybridEncoder(nn.Layer):
 
         num_fusion_layers = len(in_channels) - 1
         if self.use_sawf:
+            fpn_init = np.tile(
+                np.array(self.sawf_fpn_init, dtype='float32'),
+                [num_fusion_layers, 1])
+            pan_init = np.tile(
+                np.array(self.sawf_pan_init, dtype='float32'),
+                [num_fusion_layers, 1])
             self.fpn_fusion_weights = self.create_parameter(
                 shape=[num_fusion_layers, 2],
-                default_initializer=nn.initializer.Constant(1.0))
+                default_initializer=nn.initializer.Assign(fpn_init))
             self.pan_fusion_weights = self.create_parameter(
                 shape=[num_fusion_layers, 2],
-                default_initializer=nn.initializer.Constant(1.0))
+                default_initializer=nn.initializer.Assign(pan_init))
         else:
             self.fpn_fusion_weights = None
             self.pan_fusion_weights = None

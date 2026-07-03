@@ -37,6 +37,8 @@ HybridEncoder:
   num_encoder_layers: 1
   use_sawf: true
   sawf_eps: 0.0001
+  sawf_fpn_init: [0.8, 1.2]
+  sawf_pan_init: [1.2, 0.8]
   encoder_layer:
     name: TransformerLayer
     d_model: 256
