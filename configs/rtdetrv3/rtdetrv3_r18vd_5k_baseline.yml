@@ -7,6 +7,8 @@ _BASE_: [
 ]
 
 weights: output/rtdetrv3_r18vd_5k_baseline/model_final
+save_dir: output/rtdetrv3_r18vd_5k_baseline
+
 output_eval: output/rtdetrv3_r18vd_5k_baseline/eval
 find_unused_parameters: True
 log_iter: 100
@@ -18,6 +20,7 @@ o2m_branch: True
 num_queries_o2m: 450
 
 pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/ResNet18_vd_pretrained.pdparams
+
 
 TrainDataset:
   anno_path: annotations/instances_train2017_5k.json

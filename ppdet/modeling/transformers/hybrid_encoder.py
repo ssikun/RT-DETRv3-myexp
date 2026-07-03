@@ -66,6 +66,27 @@ class CSPRepLayer(nn.Layer):
         return self.conv3(x_1 + x_2)
 
 
+class ECAAttention(nn.Layer):
+    def __init__(self, kernel_size=3, residual_scale=0.5):
+        super(ECAAttention, self).__init__()
+        self.residual_scale = residual_scale
+        padding = (kernel_size - 1) // 2
+        self.avg_pool = nn.AdaptiveAvgPool2D(1)
+        self.conv = nn.Conv1D(
+            1,
+            1,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias_attr=False)
+
+    def forward(self, x):
+        b, c = x.shape[:2]
+        weight = self.avg_pool(x).reshape([b, 1, c])
+        weight = F.sigmoid(self.conv(weight)).reshape([b, c, 1, 1])
+        weight = 1.0 + self.residual_scale * (weight - 0.5)
+        return x * weight
+
+
 @register
 class TransformerLayer(nn.Layer):
     def __init__(self,
@@ -146,7 +167,10 @@ class HybridEncoder(nn.Layer):
                  use_sawf=False,
                  sawf_eps=1e-4,
                  sawf_fpn_init=(0.8, 1.2),
-                 sawf_pan_init=(1.2, 0.8)):
+                 sawf_pan_init=(1.2, 0.8),
+                 use_eca=False,
+                 eca_kernel_size=3,
+                 eca_residual_scale=0.5):
         super(HybridEncoder, self).__init__()
         self.in_channels = in_channels
         self.feat_strides = feat_strides
@@ -159,6 +183,9 @@ class HybridEncoder(nn.Layer):
         self.sawf_eps = sawf_eps
         self.sawf_fpn_init = sawf_fpn_init
         self.sawf_pan_init = sawf_pan_init
+        self.use_eca = use_eca
+        self.eca_kernel_size = eca_kernel_size
+        self.eca_residual_scale = eca_residual_scale
 
         # channel projection
         self.input_proj = nn.LayerList()
@@ -227,6 +254,19 @@ class HybridEncoder(nn.Layer):
         else:
             self.fpn_fusion_weights = None
             self.pan_fusion_weights = None
+
+        if self.use_eca:
+            self.fpn_eca_blocks = nn.LayerList([
+                ECAAttention(eca_kernel_size, eca_residual_scale)
+                for _ in range(num_fusion_layers)
+            ])
+            self.pan_eca_blocks = nn.LayerList([
+                ECAAttention(eca_kernel_size, eca_residual_scale)
+                for _ in range(num_fusion_layers)
+            ])
+        else:
+            self.fpn_eca_blocks = None
+            self.pan_eca_blocks = None
 
         self._reset_parameters()
 
@@ -308,6 +348,8 @@ class HybridEncoder(nn.Layer):
                     [upsample_feat, feat_low],
                     self.fpn_fusion_weights[fusion_idx]
                     if self.use_sawf else None))
+            if self.use_eca:
+                inner_out = self.fpn_eca_blocks[fusion_idx](inner_out)
             inner_outs.insert(0, inner_out)
 
         # bottom-up pan
@@ -320,6 +362,8 @@ class HybridEncoder(nn.Layer):
                 self._weighted_concat(
                     [downsample_feat, feat_height],
                     self.pan_fusion_weights[idx] if self.use_sawf else None))
+            if self.use_eca:
+                out = self.pan_eca_blocks[idx](out)
             outs.append(out)
 
         return outs

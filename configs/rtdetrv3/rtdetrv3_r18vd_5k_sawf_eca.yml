@@ -6,10 +6,10 @@ _BASE_: [
   '_base_/rtdetr_reader.yml',
 ]
 
-weights: output/rtdetrv3_r18vd_5k_sawf/model_final
-save_dir: output/rtdetrv3_r18vd_5k_sawf
+weights: output/rtdetrv3_r18vd_5k_sawf_eca/model_final
+save_dir: output/rtdetrv3_r18vd_5k_sawf_eca
 
-output_eval: output/rtdetrv3_r18vd_5k_sawf/eval
+output_eval: output/rtdetrv3_r18vd_5k_sawf_eca/eval
 find_unused_parameters: True
 log_iter: 100
 snapshot_epoch: 1
@@ -78,6 +78,9 @@ HybridEncoder:
   sawf_eps: 0.0001
   sawf_fpn_init: [0.8, 1.2]
   sawf_pan_init: [1.2, 0.8]
+  use_eca: true
+  eca_kernel_size: 3
+  eca_residual_scale: 0.5
   encoder_layer:
     name: TransformerLayer
     d_model: 256
