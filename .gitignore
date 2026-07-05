@@ -175,6 +175,9 @@ vdl_log_dir/
 # IDE
 .idea/
 .vscode/
+.agent/
 
 configs/datasets/*
 !configs/datasets/coco_detection.yml
+!configs/datasets/visdrone2019_detection.yml
+RT-DETRv3-myexp.zip
